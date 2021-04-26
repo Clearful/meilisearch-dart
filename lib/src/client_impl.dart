@@ -1,14 +1,18 @@
-import 'http_request.dart';
-import 'http_request_impl.dart';
+import 'package:dio/dio.dart';
 
 import 'client.dart';
 import 'index.dart';
 import 'index_impl.dart';
-import 'exception.dart';
 
 class MeiliSearchClientImpl implements MeiliSearchClient {
   MeiliSearchClientImpl(this.serverUrl, [this.apiKey])
-      : http = HttpRequestImpl(serverUrl, apiKey);
+      : dio = Dio(BaseOptions(
+          baseUrl: serverUrl,
+          headers: <String, dynamic>{
+            if (apiKey != null) 'X-Meili-API-Key': apiKey,
+          },
+          responseType: ResponseType.json,
+        ));
 
   @override
   final String serverUrl;
@@ -16,7 +20,7 @@ class MeiliSearchClientImpl implements MeiliSearchClient {
   @override
   final String apiKey;
 
-  final HttpRequest http;
+  final Dio dio;
 
   @override
   Future<MeiliSearchIndex> createIndex(String uid, {String primaryKey}) async {
@@ -25,7 +29,7 @@ class MeiliSearchClientImpl implements MeiliSearchClient {
       if (primaryKey != null) 'primaryKey': primaryKey,
     };
     data.removeWhere((k, v) => v == null);
-    final response = await http.postMethod<Map<String, dynamic>>(
+    final response = await dio.post<Map<String, dynamic>>(
       '/indexes',
       data: data,
     );
@@ -35,15 +39,14 @@ class MeiliSearchClientImpl implements MeiliSearchClient {
 
   @override
   Future<MeiliSearchIndex> getIndex(String uid) async {
-    final response =
-        await http.getMethod<Map<String, dynamic>>('/indexes/$uid');
+    final response = await dio.get<Map<String, dynamic>>('/indexes/$uid');
 
     return MeiliSearchIndexImpl.fromMap(this, response.data);
   }
 
   @override
   Future<List<MeiliSearchIndex>> getIndexes() async {
-    final response = await http.getMethod<List<dynamic>>('/indexes');
+    final response = await dio.get<List<dynamic>>('/indexes');
 
     return response.data
         .cast<Map<String, dynamic>>()
@@ -58,25 +61,8 @@ class MeiliSearchClientImpl implements MeiliSearchClient {
   }) async {
     try {
       return await getIndex(uid);
-    } on MeiliSearchApiException catch (_) {
+    } on DioError catch (_) {
       return await createIndex(uid, primaryKey: primaryKey);
     }
-  }
-
-  @override
-  Future<Map<String, dynamic>> health() async {
-    final response = await http.getMethod<Map<String, dynamic>>('/health');
-
-    return response.data;
-  }
-
-  @override
-  Future<bool> isHealthy() async {
-    try {
-      await health();
-    } on Exception catch (_) {
-      return false;
-    }
-    return true;
   }
 }
